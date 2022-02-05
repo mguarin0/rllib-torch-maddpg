@@ -11,9 +11,12 @@ from ray.tune import CLIReporter
 import os
 
 
+os.environ['CUDA_LAUNCH_BLOCKING']='1'
+
 def parse_args():
     # Environment
-    parser = argparse.ArgumentParser("RLLib MADDPG with PettingZoo environments")
+    parser = argparse.ArgumentParser(
+        "RLLib MADDPG with PettingZoo environments")
 
     parser.add_argument(
         "--env-type",
@@ -30,7 +33,7 @@ def parse_args():
     parser.add_argument(
         "--framework",
         choices=["tf", "tf2", "tfe", "torch"],
-        default="tf",
+        default="torch",
         help="The DL framework specifier.",
     )
     parser.add_argument(
@@ -39,27 +42,36 @@ def parse_args():
         default="ERROR",
         help="The log level for tune.run()",
     )
-    parser.add_argument(
-        "--max-episode-len", type=int, default=25, help="maximum episode length"
-    )
-    parser.add_argument(
-        "--num-episodes", type=int, default=60000, help="number of episodes"
-    )
-    parser.add_argument(
-        "--num-adversaries", type=int, default=0, help="number of adversarial agents"
-    )
-    parser.add_argument(
-        "--good-policy", type=str, default="maddpg", help="policy for good agents"
-    )
-    parser.add_argument(
-        "--adv-policy", type=str, default="maddpg", help="policy of adversaries"
-    )
+    parser.add_argument("--max-episode-len",
+                        type=int,
+                        default=25,
+                        help="maximum episode length")
+    parser.add_argument("--num-episodes",
+                        type=int,
+                        default=200_000,
+                        help="number of episodes")
+    parser.add_argument("--num-adversaries",
+                        type=int,
+                        default=0,
+                        help="number of adversarial agents")
+    parser.add_argument("--good-policy",
+                        type=str,
+                        default="maddpg",
+                        help="policy for good agents")
+    parser.add_argument("--adv-policy",
+                        type=str,
+                        default="maddpg",
+                        help="policy of adversaries")
 
     # Core training parameters
-    parser.add_argument(
-        "--lr", type=float, default=1e-3, help="learning rate for Adam optimizer"
-    )
-    parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
+    parser.add_argument("--lr",
+                        type=float,
+                        default=1e-3,
+                        help="learning rate for Adam optimizer")
+    parser.add_argument("--gamma",
+                        type=float,
+                        default=0.95,
+                        help="discount factor")
     parser.add_argument(
         "--rollout-fragment-length",
         type=int,
@@ -72,16 +84,18 @@ def parse_args():
         default=1024,
         help="number of data points /update",
     )
-    parser.add_argument(
-        "--n-step", type=int, default=1, help="length of multistep value backup"
-    )
-    parser.add_argument(
-        "--num-units", type=int, default=64, help="number of units in the mlp"
-    )
+    parser.add_argument("--n-step",
+                        type=int,
+                        default=1,
+                        help="length of multistep value backup")
+    parser.add_argument("--num-units",
+                        type=int,
+                        default=64,
+                        help="number of units in the mlp")
     parser.add_argument(
         "--replay-buffer",
         type=int,
-        default=1000000,
+        default=1_000_000,
         help="size of replay buffer in training",
     )
 
@@ -89,13 +103,13 @@ def parse_args():
     parser.add_argument(
         "--checkpoint-freq",
         type=int,
-        default=10000,
+        default=10_000,
         help="save model once every time this many iterations are completed",
     )
     parser.add_argument(
         "--local-dir",
         type=str,
-        default="~/ray_results",
+        default="/usr/src/app/rllib-torch-maddpg",
         help="path to save checkpoints",
     )
     parser.add_argument(
@@ -106,7 +120,7 @@ def parse_args():
     )
 
     # Parallelism
-    parser.add_argument("--num-workers", type=int, default=1)
+    parser.add_argument("--num-workers", type=int, default=10)
     parser.add_argument("--num-envs-per-worker", type=int, default=4)
     parser.add_argument("--num-gpus", type=int, default=0)
 
@@ -123,30 +137,34 @@ def parse_args():
         default=5,
         help="Number of episodes to run for evaluation",
     )
-    parser.add_argument(
-        "--render", type=bool, default=False, help="render environment for evaluation"
-    )
-    parser.add_argument(
-        "--record", type=str, default=None, help="path to store evaluation videos"
-    )
+    parser.add_argument("--render",
+                        type=bool,
+                        default=False,
+                        help="render environment for evaluation")
+    parser.add_argument("--record",
+                        type=str,
+                        default="/usr/src/app/video_recordings",
+                        help="path to store evaluation videos")
     return parser.parse_args()
 
 
 def main(args):
-    ray.init()
+    ray.init(local_mode=False)
     MADDPGAgent = maddpg.MADDPGTrainer
     env_name = args.env_name
     env_str = "pettingzoo." + args.env_type + "." + env_name
 
     def env_creator(config):
         env = import_module(env_str)
-        env = env.parallel_env(max_cycles=args.max_episode_len, continuous_actions=True)
+        env = env.parallel_env(max_cycles=args.max_episode_len,
+                               continuous_actions=True)
         env = ss.pad_observations_v0(env)
         env = ss.pad_action_space_v0(env)
         return env
-    
+
     register_trainable("maddpg", MADDPGAgent)
-    register_env(env_name, lambda config: ParallelPettingZooEnv(env_creator(config)))
+    register_env(env_name,
+                 lambda config: ParallelPettingZooEnv(env_creator(config)))
 
     env = ParallelPettingZooEnv(env_creator(args))
     obs_space = env.observation_spaces
@@ -158,8 +176,7 @@ def main(args):
     def gen_policy(i):
         use_local_critic = [
             args.adv_policy == "ddpg"
-            if i < args.num_adversaries
-            else args.good_policy == "ddpg"
+            if i < args.num_adversaries else args.good_policy == "ddpg"
             for i in range(len(env.agents))
         ]
         return (
@@ -181,7 +198,7 @@ def main(args):
         "log_level": args.log_level,
         "env": env_name,
         "num_workers": args.num_workers,
-        "num_gpus": args.num_gpus,
+        "num_gpus": 0,
         "num_gpus_per_worker": 0,
         "num_envs_per_worker": args.num_envs_per_worker,
         "horizon": args.max_episode_len,
@@ -205,20 +222,23 @@ def main(args):
         "learning_starts": args.train_batch_size * args.max_episode_len,
         "rollout_fragment_length": args.rollout_fragment_length,
         "train_batch_size": args.train_batch_size,
-        "batch_mode": "truncate_episodes",
+        "batch_mode": "complete_episodes",
         # === Multi-agent setting ===
         "multiagent": {
             "policies": policies,
-            "policy_mapping_fn": lambda name, _: policy_ids[agents.index(name)],
+            "policy_mapping_fn":
+            lambda name, _: policy_ids[agents.index(name)],
             # Workaround because MADDPG requires agent_id: int but actual ids are strings like 'speaker_0'
         },
         # === Evaluation and rendering ===
+        "record_env": "videos",
+        "render_env": False,
         "evaluation_interval": args.eval_freq,
         "evaluation_num_episodes": args.eval_num_episodes,
-        "evaluation_config": {
-            "record_env": args.record,
-            "render_env": args.render,
-        },
+#       "evaluation_config": {
+#           "record_env": args.record,
+#           "render_env": args.render,
+#       },
     }
 
     tune.run(
@@ -227,7 +247,9 @@ def main(args):
         config=config,
         progress_reporter=CLIReporter(),
         stop={
-            "episodes_total": args.num_episodes,
+            "episodes_total": 100_000,
+            "episode_reward_mean": -107.0,
+            "training_iteration": 100
         },
         checkpoint_freq=args.checkpoint_freq,
         local_dir=os.path.join(args.local_dir, env_name),

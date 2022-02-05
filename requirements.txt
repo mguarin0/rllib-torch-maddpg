@@ -3,3 +3,5 @@ tensorflow
 torch
 pettingzoo[mpe]
 supersuit
+aiohttp==3.7.4
+
