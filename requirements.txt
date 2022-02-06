@@ -1,4 +1,4 @@
-ray[rllib,tune,default]==1.5.2
+ray[rllib,tune,default]==1.5.0
 tensorflow
 torch
 pettingzoo[mpe]

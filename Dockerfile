@@ -13,4 +13,5 @@ RUN apt-get update -y \
   && apt-get install -y cmake \ 
   && apt-get install ffmpeg libsm6 libxext6  -y \
   && apt-get install python-opengl -y \
+  && apt-get install freeglut3-dev -y \
   && apt-get clean
